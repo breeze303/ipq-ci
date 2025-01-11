@@ -127,6 +127,7 @@ jobs:
             ./wrt/cache-all.tar.zst
 
       - name: Decompress the cache
+        continue-on-error: true
         working-directory: ./wrt
         run: |
           zstd -d cache-all.tar.zst -c | tar -xvf -
