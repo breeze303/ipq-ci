@@ -124,38 +124,16 @@ jobs:
           key: ${{env.WRT_TARGET}}-${{env.WRT_VER}}-${{env.WRT_HASH}}
           restore-keys: ${{env.WRT_TARGET}}-${{env.WRT_VER}}
           path: |
-            ./wrt/.ccache
-            ./wrt/staging_dir/host*
-            ./wrt/staging_dir/tool*
+            ./wrt/cache-all.tar.zst
 
-      - name: Update Caches
-        if: env.WRT_TEST != 'true'
+      - name: Decompress the cache
+        working-directory: ./wrt
         run: |
-          if [ -d "./wrt/staging_dir" ]; then
-            find "./wrt/staging_dir" -type d -name "stamp" -not -path "*target*" | while read -r DIR; do
-              find "$DIR" -type f -exec touch {} +
-            done
-
-            mkdir -p ./wrt/tmp && echo "1" > ./wrt/tmp/.build
-
-            echo "toolchain skiped done!"
-          else
-            echo "caches missed!"
-          fi
-
-          if ${{steps.check-cache.outputs.cache-hit != 'true'}}; then
-            CACHE_LIST=$(gh cache list --key "$WRT_TARGET-$WRT_VER" | cut -f 1)
-            for CACHE_KEY in $CACHE_LIST; do
-               gh cache delete $CACHE_KEY
-            done
-
-            echo "caches cleanup done!"
-          fi
+          zstd -d cache-all.tar.zst -c | tar -xvf -
 
       - name: Update Feeds
+        working-directory: ./wrt
         run: |
-          cd ./wrt/
-
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
@@ -201,6 +179,12 @@ jobs:
           echo "======================="
           du -h --max-depth=1
           echo "======================="
+
+      - name: Organize Files
+        working-directory: ./wrt
+        run: |
+          find "build_dir/target-aarch64_cortex-a53_musl" -mindepth 1 -maxdepth 1 -type d -exec du -sh {} + | awk '$1 ~ /[1-9]\.[5-9]G|[2-9]G/' | awk '{print $2}' | xargs -I {} rm -rf {}
+          tar -cvf - .ccache staging_dir /build_dir/target-aarch64_cortex-a53_musl | zstd -T0 -12 -o cache-all.tar.zst
 
       - name: Package Firmware
         run: |
